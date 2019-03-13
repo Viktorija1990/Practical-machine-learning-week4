@@ -1,0 +1,111 @@
+---
+title: "Practical ML. Final project"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## *Practical machine learning final project*
+
+The goal of this project is to predict the manner in which 6 participants did the exercise, i.e. "classe" variable in the training set. This report describes data preparation, model build and cross validation processes. We will also use this prediction model to predict 20 different test cases.
+
+## Data preparation
+
+Required libraries and datasets are uploaded.
+
+```{r eval=FALSE}
+library(data.table)
+library(caret)
+library(rpart)
+library(randomForest)
+
+testData <- read.table("D:/Coursera/Data science/Practical ML/Week 4/Project/pml-testing.csv", header=TRUE, sep=",")
+trainData <- read.table("D:/Coursera/Data science/Practical ML/Week 4/Project/pml-training.csv", header=TRUE, sep=",")
+
+```
+
+All columns with at least one NA/blank/#DIV/0! are removed. Also columns with unnecessary information (first 7 columns).
+
+
+```{r eval=FALSE}
+
+tmp <- as.data.table(trainData)
+tmp[tmp == '' | tmp == ' ' | tmp == '#DIV/0!'] <- NA
+
+trainData <- as.data.frame(tmp)
+remove_NA = colnames(trainData)[ apply(trainData, 2, anyNA) ]
+
+train_dt =  trainData[ ,!(names(trainData) %in% remove_NA)]
+train_dt = train_dt[ , -c(1:7) ]
+
+```
+
+Creating a validation dataset, since testing dataset does not have 'classe' variable.
+
+```{r eval=FALSE}
+Index = createDataPartition(train_dt$classe, p=0.7, list = FALSE)
+train_dt <- train_dt[Index,]
+validate_dt <- train_dt[-Index,]
+
+```
+
+Now we have reduced the number of variables until 53.
+
+## Model building
+
+We will train the data by testing *random forest decision trees (rf)* and *decision trees with CART (rpart)*. In below result we use *repeatedcv* method to divide our dataset into 3 folds cross-validation and repeat only 1 time. I will use validation set for back testing. Here *mtry*: Number of variable is randomly collected to be sampled at each split time.
+
+The model will generate 3 random values of mtry at each time tunning, i.e. *tuneLength*  = 3.
+
+```{r eval=FALSE}
+control <- trainControl(method='repeatedcv', 
+                        number=3, 
+                        repeats=1,
+                        search = 'random')
+set.seed(1)
+
+mod_rf <- train(classe ~ ., train_dt, 
+                method = "rf", 
+                metric = 'Accuracy',
+                tuneLength  = 3, 
+                trControl = control)
+```
+
+```{r rf}
+print(mod_rf)
+```
+
+```{r eval=FALSE}
+set.seed(5)
+
+mod_rpart <- train(classe ~ ., train_dt_fit, 
+                method = "rpart", 
+                metric = 'Accuracy',
+                tuneLength  = 3, 
+                trControl = control)
+```
+
+```{r rpart}
+print(mod_rpart)
+```
+
+We will use validation dataset to compare actuals vs. predictions.
+
+```{r pr}
+predict_rf = predict(mod_rf, validate_dt_fit[ , -53 ])
+confusionMatrix(predict_rf, validate_dt_fit$classe) 
+
+predict_rpart = predict(mod_rpart, validate_dt_fit[ , -53 ])
+confusionMatrix(predict_rpart, validate_dt_fit$classe) 
+```
+
+## Predicting 20 test cases 
+
+We will use *random forest* method since it provided better accuracy. The risk of overestimation.
+
+```{r final}
+predict = predict(mod_rf, testData)
+print(predict)
+```
